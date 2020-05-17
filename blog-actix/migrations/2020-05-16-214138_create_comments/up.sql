@@ -1,0 +1,6 @@
+CREATE TABLE comments (
+    id INTEGER PRIMARY KEY NOT NULL,
+    user_id INTENGER NOT NULL REFERENCES users (id),
+    post_id INTENGER NOT NULL REFERENCES posts(id),
+    body TEXT NOT NULL
+)
