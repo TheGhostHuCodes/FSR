@@ -1,6 +1,8 @@
+use crate::config;
 use crate::errors::{Error, HurlResult};
 use log::{debug, trace};
 use std::convert::TryFrom;
+use std::path::PathBuf;
 use structopt::StructOpt;
 
 /// A command line HTTP client.
@@ -88,6 +90,20 @@ pub struct App {
     ///     e.g. foo:=@bar.json becomes {"foo": {"bar": "this is from bar.json"}}
     #[structopt(parse(try_from_str = parse_param), verbatim_doc_comment)]
     pub parameters: Vec<Parameter>,
+
+    /// Configuration file.
+    ///
+    /// A TOML file which is stored by default at HOME/.config/hurl/config where
+    /// HOME is platform dependent.
+    ///
+    /// The file supports the following optional keys with the given types:
+    /// verbose: u8 form: bool auth: string token: string secure: bool
+    ///
+    /// Each option has the same meaning as the corresponding configuration
+    /// option with the same name. The verbose setting is a number from 0,
+    /// meaning no logging, to 5, meaning maximal log output.
+    #[structopt(short, long, env = "HURL_CONFIG", parse(from_os_str))]
+    pub config: Option<PathBuf>,
 }
 
 impl App {
@@ -109,6 +125,34 @@ impl App {
             3 => Some("info"),
             4 => Some("debug"),
             _ => Some("trace"),
+        }
+    }
+
+    pub fn process_config_file(&mut self) {
+        let config_path = config::config_file(self);
+        let config_opt = config::read_config_file(config_path);
+        if let Some(mut config) = config_opt {
+            if self.verbose == 0 {
+                if let Some(v) = config.verbose {
+                    self.verbose = v;
+                }
+                if !self.form {
+                    if let Some(f) = config.form {
+                        self.form = f;
+                    }
+                }
+                if !self.secure {
+                    if let Some(s) = config.secure {
+                        self.secure = s;
+                    }
+                }
+                if self.auth.is_none() {
+                    self.auth = config.auth.take();
+                }
+                if self.token.is_none() {
+                    self.token = config.token.take();
+                }
+            }
         }
     }
 }
