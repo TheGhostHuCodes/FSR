@@ -7,6 +7,7 @@ mod client;
 mod config;
 mod directories;
 mod errors;
+mod session;
 
 use errors::HurlResult;
 
@@ -22,10 +23,15 @@ fn main() -> HurlResult<()> {
         pretty_env_logger::init();
     }
 
+    let mut session = app
+        .session
+        .as_ref()
+        .map(|name| session::Session::get_or_create(&app, name.clone(), app.host()));
+
     match app.cmd {
         Some(ref method) => {
-            let resp = client::perform_method(&app, method)?;
-            handle_response(resp)
+            let resp = client::perform_method(&app, method, &mut session)?;
+            handle_response(&app, resp, &mut session)
         }
         None => {
             let url = app.url.take().unwrap();
@@ -35,13 +41,17 @@ fn main() -> HurlResult<()> {
             } else {
                 reqwest::Method::GET
             };
-            let resp = client::perform(&app, method, &url, &app.parameters)?;
-            handle_response(resp)
+            let resp = client::perform(&app, method, &mut session, &url, &app.parameters)?;
+            handle_response(&app, resp, &mut session)
         }
     }
 }
 
-fn handle_response(mut resp: reqwest::Response) -> HurlResult<()> {
+fn handle_response(
+    app: &app::App,
+    mut resp: reqwest::Response,
+    session: &mut Option<session::Session>,
+) -> HurlResult<()> {
     let status = resp.status();
     let mut s = format!(
         "{:?} {} {}\n",
@@ -80,6 +90,13 @@ fn handle_response(mut resp: reqwest::Response) -> HurlResult<()> {
         Err(e) => {
             trace!("Failed to parse result to JSON: {}", e);
             println!("{}", result);
+        }
+    }
+
+    if !app.read_only {
+        if let Some(s) = session {
+            s.update_with_response(&resp);
+            s.save(app)?;
         }
     }
 

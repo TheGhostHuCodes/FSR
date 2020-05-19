@@ -1,5 +1,6 @@
 use crate::app::{App, Method, Parameter};
 use crate::errors::{Error, HurlResult};
+use crate::session::Session;
 use log::{self, debug, info, log_enabled, trace};
 use reqwest::multipart::Form;
 use reqwest::{Client, RequestBuilder, Response, Url};
@@ -9,11 +10,16 @@ use std::fs::File;
 use std::io::BufReader;
 use std::time::Instant;
 
-pub fn perform_method(app: &App, method: &Method) -> HurlResult<Response> {
+pub fn perform_method(
+    app: &App,
+    method: &Method,
+    session: &mut Option<Session>,
+) -> HurlResult<Response> {
     let method_data = method.data();
     perform(
         app,
         method.into(),
+        session,
         &method_data.url,
         &method_data.parameters,
     )
@@ -22,6 +28,7 @@ pub fn perform_method(app: &App, method: &Method) -> HurlResult<Response> {
 pub fn perform(
     app: &App,
     method: reqwest::Method,
+    session: &mut Option<Session>,
     raw_url: &str,
     parameters: &Vec<Parameter>,
 ) -> HurlResult<Response> {
@@ -38,6 +45,14 @@ pub fn perform(
     }
 
     let mut builder = client.request(method, url);
+    builder = handle_session(
+        builder,
+        session,
+        parameters,
+        !app.read_only,
+        &app.auth,
+        &app.token,
+    );
     builder = handle_parameters(builder, app.form, is_multipart, parameters)?;
     builder = handle_auth(builder, &app.auth, &app.token)?;
 
@@ -50,6 +65,26 @@ pub fn perform(
     } else {
         builder.send().map_err(From::from)
     }
+}
+
+fn handle_session(
+    mut builder: RequestBuilder,
+    session: &mut Option<Session>,
+    parameters: &Vec<Parameter>,
+    update_session: bool,
+    auth: &Option<String>,
+    token: &Option<String>,
+) -> RequestBuilder {
+    if let Some(s) = session {
+        trace!("Adding session data to request");
+        builder = s.add_to_request(builder);
+        if update_session {
+            trace! {"Updating session with parameters from this request"}
+            s.update_with_parameters(parameters);
+            s.update_auth(auth, token);
+        }
+    }
+    builder
 }
 
 fn parse(app: &App, s: &str) -> Result<Url, reqwest::UrlError> {

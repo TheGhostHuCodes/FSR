@@ -1,5 +1,6 @@
 use crate::config;
 use crate::errors::{Error, HurlResult};
+use crate::session::make_safe_pathname;
 use log::{debug, trace};
 use std::convert::TryFrom;
 use std::path::PathBuf;
@@ -104,6 +105,19 @@ pub struct App {
     /// meaning no logging, to 5, meaning maximal log output.
     #[structopt(short, long, env = "HURL_CONFIG", parse(from_os_str))]
     pub config: Option<PathBuf>,
+
+    /// Session name.
+    #[structopt(long)]
+    pub session: Option<String>,
+
+    /// Session storage location.
+    #[structopt(long, parse(from_os_str))]
+    pub session_dir: Option<PathBuf>,
+
+    /// If true then use the stored session to augment the request, but do not
+    /// modify what is stored.
+    #[structopt(long)]
+    pub read_only: bool,
 }
 
 impl App {
@@ -153,6 +167,16 @@ impl App {
                     self.token = config.token.take();
                 }
             }
+        }
+    }
+
+    pub fn host(&self) -> String {
+        if let Some(url) = &self.url {
+            make_safe_pathname(url)
+        } else if let Some(cmd) = &self.cmd {
+            make_safe_pathname(&cmd.data().url)
+        } else {
+            unreachable!();
         }
     }
 }
