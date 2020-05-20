@@ -11,6 +11,7 @@ pub enum Error {
     SerdeJson(serde_json::error::Category),
     IO(std::io::ErrorKind),
     UrlParseError(reqwest::UrlError),
+    SyntaxLoadError(&'static str),
 }
 
 pub type HurlResult<T> = Result<T, Error>;
@@ -33,6 +34,7 @@ impl fmt::Display for Error {
             Error::SerdeJson(c) => write!(f, "JSON error: {:?}", c),
             Error::IO(k) => write!(f, "IO Error: {:?}", k),
             Error::UrlParseError(e) => write!(f, "URL Parsing Error: {}", e),
+            Error::SyntaxLoadError(typ) => write!(f, "Error loading syntax for {}", typ),
         }
     }
 }
